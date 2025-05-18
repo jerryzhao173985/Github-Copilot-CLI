@@ -1,16 +1,17 @@
 import pytest
+from typing import Optional
 
 from copilot_cli.utils import should_enable_spinner
 from copilot_cli.args import Args
 
 
 class DummyOptions:
-    def __init__(self, spinner: bool | None):
+    def __init__(self, spinner: Optional[bool]):
         self.spinner = spinner
 
 
 class DummyAction:
-    def __init__(self, spinner: bool | None = None):
+    def __init__(self, spinner: Optional[bool] = None):
         self.options = DummyOptions(spinner) if spinner is not None else None
 
 

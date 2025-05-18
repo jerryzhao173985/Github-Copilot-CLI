@@ -1,13 +1,15 @@
+from __future__ import annotations
 from dataclasses import dataclass
+from typing import Optional
 
 
 @dataclass
 class Args:
     path: str
-    prompt: str | None
+    prompt: Optional[str]
     model: str
     system_prompt: str
-    action: str | None
+    action: Optional[str]
     no_stream: bool
     no_spinner: bool
     copy_to_clipboard: bool

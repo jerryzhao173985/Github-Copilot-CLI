@@ -26,7 +26,7 @@ try:
     import pydantic as _pydantic  # noqa: F401  # pylint: disable=unused-import
 except ModuleNotFoundError:  # pragma: no cover – runtime fallback
 
-    def _field(*, default: Any = None, default_factory: Any | None = None, **_kwargs: Any) -> Any:  # noqa: D401
+    def _field(*, default: Any = None, default_factory: Any = None, **_kwargs: Any) -> Any:  # noqa: D401
         return default if default_factory is None else default_factory()
 
     class _BaseModel:  # pylint: disable=too-few-public-methods
@@ -106,7 +106,10 @@ def _bootstrap_cli_helpers() -> None:  # noqa: D401
     spec = spec_from_file_location("copilot_cli._entry", script_path)
     if spec and spec.loader:  # pragma: no cover – defensive guard
         module = module_from_spec(spec)
-        spec.loader.exec_module(module)  # type: ignore[attr-defined]
+        try:
+            spec.loader.exec_module(module)  # type: ignore[attr-defined]
+        except Exception:
+            return
 
         globals_to_export = [
             "create_parser",

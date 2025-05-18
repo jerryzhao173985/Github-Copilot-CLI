@@ -4,12 +4,15 @@ import json
 import os
 import uuid
 from collections.abc import Iterator
-from datetime import UTC, datetime
+from datetime import datetime, timezone
+UTC = timezone.utc
 from pathlib import Path
-from typing import TypedDict
+from typing import TypedDict, Optional
+import urllib.parse
+import sys
 
 import requests
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, ValidationError
 from requests.exceptions import RequestException
 
 from .exception.api_error import APIError
@@ -21,7 +24,7 @@ class HostsData(BaseModel):
 
     @classmethod
     def from_file(cls, file_path: Path) -> "HostsData":
-        """Extract the first OAuth token from a *github-copilot* config file.
+        """Extract the OAuth token from a *github-copilot* config file.
 
         The VS Code / Neovim Copilot extensions keep their authentication
         state in two JSON files: *hosts.json* and *apps.json*.  The exact
@@ -30,15 +33,16 @@ class HostsData(BaseModel):
         Enterprise installation (e.g. *github.my-corp.com*).
 
         The previous implementation hard-coded a lookup for keys that
-        contained the substring ``"github.com"`` which meant that users of
-        Copilot Enterprise were unable to authenticate – the host key in their
-        configuration usually is the enterprise domain and therefore does not
-        include *github.com*.
+        contained the substring ``"github.com"``, which prevented users of
+        Copilot Enterprise from authenticating (their host key usually is the
+        enterprise domain without ``github.com``).  The current logic gathers
+        all available tokens and:
 
-        We now iterate over **all** top-level entries and return the first one
-        that provides an ``oauth_token`` field.  This is sufficient because
-        every *hosts.json* produced by the official extensions contains
-        exactly one active login.
+        1. Returns the GitHub.com (personal) token if present.
+        2. Otherwise returns the first token (Enterprise or otherwise).
+
+        This supports both personal and Enterprise Copilot accounts when both
+        configurations are present.
         """
 
         hosts_file = Path(file_path)
@@ -47,21 +51,31 @@ class HostsData(BaseModel):
         except (FileNotFoundError, json.JSONDecodeError):  # pragma: no cover
             raise AuthenticationError("GitHub Copilot configuration not found or invalid.")
 
-        for value in hosts_data.values():
+        tokens: dict[str, str] = {}
+        for host, value in hosts_data.items():
             # *apps.json* stores each application in a list, *hosts.json* uses
             # a mapping – support both layouts.
             if isinstance(value, list):
                 for element in value:
-                    token = element.get("oauth_token") if isinstance(element, dict) else None
-                    if token:
-                        return cls(github_oauth_token=token)
+                    if isinstance(element, dict) and (token := element.get("oauth_token")):
+                        tokens[host] = token
+                        break
             elif isinstance(value, dict):
-                token = value.get("oauth_token")
-                if token:
-                    return cls(github_oauth_token=token)
+                if (token := value.get("oauth_token")):
+                    tokens[host] = token
 
-        # Fall-back: no usable token found in the file.
-        raise AuthenticationError("OAuth token not found in GitHub Copilot configuration.")
+        if not tokens:
+            raise AuthenticationError("OAuth token not found in GitHub Copilot configuration.")
+
+        for host, token in tokens.items():
+            try:
+                hostname = urllib.parse.urlparse(host).netloc or urllib.parse.urlparse(host).path
+            except Exception:
+                hostname = host
+            if hostname == "github.com":
+                return cls(github_oauth_token=token)
+
+        return cls(github_oauth_token=next(iter(tokens.values())))
 
 
 class APIEndpoints:
@@ -103,7 +117,7 @@ class CopilotToken(BaseModel):
 
     public_suggestions: str
     telemetry: str
-    enterprise_list: list[int]
+    enterprise_list: list[int] = Field(default_factory=list)
 
     code_review_enabled: bool
 
@@ -156,8 +170,8 @@ class GithubCopilotClient:
     """
 
     def __init__(self) -> None:
-        self._oauth_token: str | None = None
-        self._copilot_token: CopilotToken | None = None
+        self._oauth_token: Optional[str] = None
+        self._copilot_token: Optional[CopilotToken] = None
         self._machine_id: str = str(uuid.uuid4())
         self._session_id: str = ""
 
@@ -172,17 +186,31 @@ class GithubCopilotClient:
             try:
                 token_data = json.loads(cache_path.read_text())
                 self._copilot_token = CopilotToken(**token_data)
-            except (json.JSONDecodeError, TypeError):
+            except (json.JSONDecodeError, TypeError, ValidationError):
                 cache_path.unlink(missing_ok=True)
 
     def _load_oauth_token(self) -> str:
         """Loads the OAuth token from the GitHub Copilot configuration."""
-        config_dir = os.getenv("XDG_CONFIG_HOME", Path.home() / ".config")
+        # Default Copilot extension config directory (Linux/XDG), plus VS Code globalStorage paths
+        config_dir = Path(os.getenv("XDG_CONFIG_HOME", Path.home() / ".config"))
 
         files = [
-            Path(config_dir) / "github-copilot" / "hosts.json",
-            Path(config_dir) / "github-copilot" / "apps.json",
+            config_dir / "github-copilot" / "hosts.json",
+            config_dir / "github-copilot" / "apps.json",
         ]
+
+        # Also check VS Code Copilot extension state under globalStorage (Linux, macOS, Windows)
+        if sys.platform == "darwin":
+            base = Path.home() / "Library" / "Application Support"
+        elif sys.platform == "win32":
+            base = Path(os.getenv("APPDATA", Path.home() / "AppData" / "Roaming"))
+        else:
+            base = config_dir
+        vsc_storage = base / "Code" / "User" / "globalStorage" / "github.copilot"
+        files.extend([
+            vsc_storage / "hosts.json",
+            vsc_storage / "apps.json",
+        ])
 
         for file in files:
             if file.exists():
@@ -202,13 +230,20 @@ class GithubCopilotClient:
         Gets or loads the OAuth token.
         """
 
-        # 1. Fast-path: honour explicit environment variable so that advanced
+        # 1. Fast-path: honour explicit environment variables so that advanced
         #    users (CI jobs, container images, etc.) can inject a token
         #    without copying *hosts.json*.
+        #    Recognized: GITHUB_COPILOT_OAUTH_TOKEN, COPILOT_OAUTH_TOKEN,
+        #    GITHUB_TOKEN, GH_TOKEN.
         if self._oauth_token:
             return self._oauth_token
 
-        env_token = os.getenv("GITHUB_COPILOT_OAUTH_TOKEN") or os.getenv("COPILOT_OAUTH_TOKEN")
+        env_token = (
+            os.getenv("GITHUB_COPILOT_OAUTH_TOKEN")
+            or os.getenv("COPILOT_OAUTH_TOKEN")
+            or os.getenv("GITHUB_TOKEN")
+            or os.getenv("GH_TOKEN")
+        )
         if env_token:
             self._oauth_token = env_token
             return env_token
@@ -229,11 +264,15 @@ class GithubCopilotClient:
         }
 
         try:
-            response = requests.get(APIEndpoints.TOKEN, headers=headers, timeout=10)
+            token_url = os.getenv("GITHUB_COPILOT_TOKEN_URL", APIEndpoints.TOKEN)
+            response = requests.get(token_url, headers=headers, timeout=10)
             response.raise_for_status()
             token_data = response.json()
 
-            self._copilot_token = CopilotToken(**token_data)
+            try:
+                self._copilot_token = CopilotToken(**token_data)
+            except ValidationError as e:
+                raise APIError(f"Invalid Copilot token data received: {e}") from e
 
             # Cache the token
             cache_path = Path("/tmp/copilot_token.json")
@@ -278,6 +317,7 @@ class GithubCopilotClient:
         try:
             self._ensure_valid_token()
 
+            org = os.getenv("GITHUB_COPILOT_ORGANIZATION", "github-copilot")
             headers = {
                 "Content-Type": "application/json",
                 "x-request-id": str(uuid.uuid4()),
@@ -285,7 +325,7 @@ class GithubCopilotClient:
                 "vscode-sessionid": self._session_id,
                 "Authorization": f"Bearer {self._copilot_token.token}",
                 "Copilot-Integration-Id": "vscode-chat",
-                "openai-organization": "github-copilot",
+                "openai-organization": org,
                 "openai-intent": "conversation-panel",
                 **Headers.AUTH,
             }
@@ -299,13 +339,14 @@ class GithubCopilotClient:
                 "stream": False,
             }
 
-            response = requests.post(APIEndpoints.CHAT, headers=headers, json=body, timeout=10)
+            chat_url = os.getenv("GITHUB_COPILOT_CHAT_URL", APIEndpoints.CHAT)
+            response = requests.post(chat_url, headers=headers, json=body, timeout=10)
             response.raise_for_status()
 
             chat_response: ChatResponse = response.json()
             return chat_response["choices"][0]["message"]["content"]
 
-        except (RequestException, APIError, AuthenticationError) as exc:  # pragma: no cover – offline fallback
+        except (RequestException, APIError, AuthenticationError, ValidationError):
             # Produce a deterministic offline response to keep the CLI usable
             # without network access.
             offline_msg = (
@@ -335,6 +376,7 @@ class GithubCopilotClient:
         try:
             self._ensure_valid_token()
 
+            org = os.getenv("GITHUB_COPILOT_ORGANIZATION", "github-copilot")
             headers = {
                 "Content-Type": "application/json",
                 "x-request-id": str(uuid.uuid4()),
@@ -342,7 +384,7 @@ class GithubCopilotClient:
                 "vscode-sessionid": self._session_id,
                 "Authorization": f"Bearer {self._copilot_token.token}",
                 "Copilot-Integration-Id": "vscode-chat",
-                "openai-organization": "github-copilot",
+                "openai-organization": org,
                 "openai-intent": "conversation-panel",
                 **Headers.AUTH,
             }
@@ -356,7 +398,8 @@ class GithubCopilotClient:
                 "stream": True,
             }
 
-            with requests.post(APIEndpoints.CHAT, headers=headers, json=body, stream=True, timeout=10) as response:
+            chat_url = os.getenv("GITHUB_COPILOT_CHAT_URL", APIEndpoints.CHAT)
+            with requests.post(chat_url, headers=headers, json=body, stream=True, timeout=10) as response:
                 response.raise_for_status()
 
                 for line in response.iter_lines():
@@ -371,6 +414,6 @@ class GithubCopilotClient:
                             if content:
                                 yield content
 
-        except (RequestException, APIError, AuthenticationError):  # pragma: no cover – offline fallback
+        except (RequestException, APIError, AuthenticationError, ValidationError):
             # Simple one-shot offline response.
             yield "[offline mock stream] " + prompt

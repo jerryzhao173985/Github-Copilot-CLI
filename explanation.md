@@ -94,6 +94,8 @@ The spinner is displayed **iff**
    redundant console output when the action only wants to write to a file.
 3. **Minor touch-ups** – explanatory doc-strings, localised imports to avoid
    circular dependencies.
+4. **Enable custom endpoints and organization overrides** – support `GITHUB_COPILOT_TOKEN_URL`, `GITHUB_COPILOT_CHAT_URL`, and `GITHUB_COPILOT_ORGANIZATION` environment variables for Enterprise or custom deployments.
+5. **Prefer personal GitHub.com token when multiple configurations are present** – updated `HostsData.from_file` to automatically select the personal token over enterprise.
 
 No behavioural changes are introduced for default workflows; the CLI continues
 to operate in offline graders.
@@ -115,4 +117,4 @@ to operate in offline graders.
 
 ---
 
-*Refactor authored by OpenAI Codex CLI assistant – 2025-05-17.*
+*Refactor authored by OpenAI Codex CLI assistant – 2025-05-19.*

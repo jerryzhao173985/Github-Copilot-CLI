@@ -1,7 +1,9 @@
+from __future__ import annotations
 import argparse
 import os
 import subprocess
 import sys
+from typing import Optional
 
 # ---------------------------------------------------------------------------
 # Optional dependency stubs
@@ -20,7 +22,7 @@ except ModuleNotFoundError:  # pragma: no cover – runtime fallback
     from dataclasses import dataclass, field as dc_field
     from typing import Any
 
-    def _field(*, default: Any = None, default_factory: Any | None = None, **_kwargs: Any) -> Any:  # noqa: D401
+    def _field(*, default: Any = None, default_factory: Any = None, **_kwargs: Any) -> Any:  # noqa: D401
         if default_factory is not None:
             return default_factory()
         return default
@@ -80,24 +82,6 @@ except ModuleNotFoundError:  # pragma: no cover – runtime fallback
 
     pyperclip = _NoClipboard()  # type: ignore
 
-## Optional: spinner support ----------------------------------------------------
-#try:
-#    from halo import Halo  # type: ignore#
-##
-#
-#    def _get_spinner(*args: object, **kwargs: object):  # noqa: D401
-#        return Halo(*args, **kwargs)#
-#
-#except ModuleNotFoundError:  # pragma: no cover – runtime fallback
-#
-#    from contextlib import contextmanager
-#
-#    @contextmanager
-#    def _get_spinner(*_args: object, **_kwargs: object):  # noqa: D401
-#        yield  # no-op context manager
-
-# Re-export *Halo* symbol expected later in the file.
-#Halo = _get_spinner  # type: ignore
 
 
 # Optional: spinner support ----------------------------------------------------
@@ -252,7 +236,7 @@ def process_action_commands(
     path: str,
 ) -> str:
     final_prompt = base_prompt
-    commands: dict[str, list[str]] | None = getattr(action_obj, "commands", None)
+    commands: Optional[dict[str, list[str]]] = getattr(action_obj, "commands", None)
 
     if not commands:
         return final_prompt
@@ -270,7 +254,7 @@ def process_action_commands(
     return final_prompt
 
 
-def create_streamer(options: StreamOptions | None = None) -> MarkdownStreamer:
+def create_streamer(options: Optional[StreamOptions] = None) -> MarkdownStreamer:
     """
     Create a configured markdown streamer.
 
@@ -291,9 +275,9 @@ def handle_completion(
     prompt: str,
     model: str,
     system_prompt: str,
-    action_obj: Action | None,
+    action_obj: Optional[Action],
     args: Args,
-    stream_options: StreamOptions | None = None,
+    stream_options: Optional[StreamOptions] = None,
 ) -> str:
     if not args.no_stream and action_obj and action_obj.options.stream:
         streamer = create_streamer(stream_options)
@@ -319,7 +303,7 @@ def handle_completion(
         # instead of proper model instances.
         # --------------------------------------------------------------
 
-        def _safe_get(nested: object | None, key: str, default: object | None = None):  # noqa: D401
+        def _safe_get(nested: Optional[object], key: str, default: Optional[object] = None):  # noqa: D401
             if nested is None:
                 return default
             if isinstance(nested, dict):

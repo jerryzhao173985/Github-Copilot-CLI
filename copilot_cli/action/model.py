@@ -1,3 +1,8 @@
+# Postpone evaluation of annotations for Python <3.10
+# Postpone evaluation of annotations for Python <3.10
+from __future__ import annotations
+from typing import Optional
+
 from pydantic import BaseModel, Field
 # *typing_extensions* might be absent in minimal environments. Fallback to the
 # built-in *typing* module which provides *Callable* since Python 3.5.
@@ -12,7 +17,7 @@ from ..args import Args
 
 class Output(BaseModel):
     to_stdout: bool = Field(default=True)
-    to_file: str | None = None
+    to_file: Optional[str] = None
 
 
 class Options(BaseModel):
@@ -25,7 +30,7 @@ class Action(BaseModel):
     prompt: str
     system_prompt: str
     model: str
-    commands: dict[str, list[str]] | None = None
-    on_complete: Callable[[str, Args], None] | None = None
+    commands: Optional[dict[str, list[str]]] = None
+    on_complete: Optional[Callable[[str, Args], None]] = None
     output: Output = Field(default_factory=Output)
     options: Options = Field(default_factory=Options)

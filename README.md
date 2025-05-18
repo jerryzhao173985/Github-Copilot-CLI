@@ -1,6 +1,6 @@
 # 🚀 Copilot CLI
 
-[![CI](https://github.com/rachartier/copilot-cli/actions/workflows/ci.yml/badge.svg)](https://github.com/rachartier/copilot-cli/actions/workflows/ci.yml) [![Release](https://github.com/rachartier/copilot-cli/actions/workflows/main.yml/badge.svg)](https://github.com/rachartier/copilot-cli/actions/workflows/main.yml)
+[![CI](https://github.com/jerryzhao173985/Github-Copilot-CLI/actions/workflows/ci.yml/badge.svg)](https://github.com/jerryzhao173985/Github-Copilot-CLI/actions/workflows/ci.yml)
 
 **Copilot CLI** is a standalone command-line interface that brings GitHub Copilot’s chat and action capabilities directly to your terminal. It enables conversational AI-driven code assistance, predefined workflows (actions), and flexible customization, all with first-class offline fallbacks and minimal external dependencies.
 
@@ -94,11 +94,30 @@ pyinstaller --onefile copilot-cli.py --add-data ./actions.yml:.
 ## Authentication
 
 Copilot CLI locates your GitHub Copilot OAuth token from:
-
-- `$GITHUB_COPILOT_OAUTH_TOKEN` or `$COPILOT_OAUTH_TOKEN` environment variables  
-- `~/.config/github-copilot/hosts.json` or `apps.json` (VS Code/Neovim/JB extensions)
+- `$GITHUB_COPILOT_OAUTH_TOKEN` or `$COPILOT_OAUTH_TOKEN` for Copilot-specific tokens; `$GITHUB_TOKEN` or `$GH_TOKEN` for personal GitHub.com tokens  
+- Local Copilot extension config (`hosts.json`/`apps.json`):
+  - Linux/XDG: `~/.config/github-copilot/{hosts,apps}.json`
+  - VS Code globalStorage Copilot extension state:
+    - Linux: `~/.config/Code/User/globalStorage/github.copilot/{hosts,apps}.json`
+    - macOS: `~/Library/Application Support/Code/User/globalStorage/github.copilot/{hosts,apps}.json`
+    - Windows: `%APPDATA%/Code/User/globalStorage/github.copilot/{hosts,apps}.json`
 
 Set one of the above if you are not using an IDE plugin.
+
+When multiple Copilot configurations are detected (e.g. personal GitHub.com and an Enterprise host),
+the CLI prefers the personal GitHub.com token by default. To force an Enterprise or other token,
+set one of the environment variables explicitly (e.g. `$GITHUB_COPILOT_OAUTH_TOKEN`, `$COPILOT_OAUTH_TOKEN`,
+`$GITHUB_TOKEN`, or `$GH_TOKEN`).
+
+By default, Copilot CLI uses the public GitHub Cloud endpoints. To work with
+GitHub Copilot Enterprise or a custom Copilot deployment, override the token
+and chat endpoints and the organization header via environment variables:
+
+```bash
+export GITHUB_COPILOT_TOKEN_URL="https://github.mycompany.com/copilot_internal/v2/token"
+export GITHUB_COPILOT_CHAT_URL="https://github.mycompany.com/chat/completions"
+export GITHUB_COPILOT_ORGANIZATION="mycompany"
+```
 
 ## Usage
 
@@ -227,8 +246,9 @@ Refer to the existing entries in `actions.yml` for examples.
 - **Continuous Integration**: Run tests and lint on push/PR via `.github/workflows/ci.yml`.
 - **Running tests**:
   ```sh
-  pip install pytest
-  pytest
+  pip install --upgrade pip
+  pip install -r requirements.txt
+  pytest --maxfail=1 --disable-warnings -q
   ```
 
 ## Contributing
