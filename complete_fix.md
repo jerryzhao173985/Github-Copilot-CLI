@@ -140,8 +140,6 @@ With these changes the `enterprise_list` error goes away, the CLI won’t crash 
 
 -----
 
----
-
 ## Copilot CLI Fixes and Enhancements (new changes)
 
 This document outlines recent improvements to the Copilot CLI, focusing on enhanced token handling, documentation clarifications, and .gitignore updates. These changes aim to prevent crashes due to unexpected token shapes and provide a more robust user experience.
@@ -275,5 +273,47 @@ The README has been updated to clearly distinguish that `GITHUB_TOKEN`/`GH_TOKEN
     ```
 
 With these fixes in place, the `enterprise_list` error is resolved. The CLI now handles malformed or missing fields safely and will correctly pick up either your personal GitHub.com token or an enterprise Copilot token (or fall back to the offline stub) without crashing.
+
+## Github CI Tests
+
+----------------------------------------------------------------------------------------------------------------------------------
+
+### 1. Ensure the GitHub Actions matrix uses the right Python versions
+
+We verify that your CI workflow now runs on supported interpreters (3.9, 3.10, 3.11, 3.12), not the invalid “3.1” that was causing
+setup-python to fail:
+
+        strategy:
+          matrix:
+            python-version: [3.9, 3.10, 3.11, 3.12]
+
+.github/workflows/ci.yml (/Users/jerry/Downloads/copilot-cli/.github/workflows/ci.yml)
+
+----------------------------------------------------------------------------------------------------------------------------------
+
+### 2. Augment the unit tests to cover both values of no_spinner for all spinner-preference cases
+
+The existing tests only exercised no_spinner_flag=True for the various DummyAction(spinner=…) scenarios. I’ve added the
+corresponding no_spinner_flag=False cases so that we confirm the spinner is always disabled when the global flag is off:
+
+         [
+             (True,  None,               True),
+             (False, None,               False),
+             (True,  DummyAction(spinner=False), False),
+             (True,  DummyAction(spinner=True),  True),
+             (True,  DummyAction(spinner=None),  True),
+    +        (False, DummyAction(spinner=False), False),
+    +        (False, DummyAction(spinner=True),  False),
+    +        (False, DummyAction(spinner=None),  False),
+         ],
+
+tests/test_utils.py (/Users/jerry/Downloads/copilot-cli/tests/test_utils.py)
+
+----------------------------------------------------------------------------------------------------------------------------------
+
+With these changes:
+
+    * **CI** will install the proper Python versions and run your tests successfully on each push.
+    * **Tests** now fully validate the logical AND of the global `--no-spinner` flag against the per-action preference.
 
 

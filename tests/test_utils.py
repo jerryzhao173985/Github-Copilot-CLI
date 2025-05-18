@@ -23,6 +23,9 @@ class DummyAction:
         (True, DummyAction(spinner=False), False),
         (True, DummyAction(spinner=True), True),
         (True, DummyAction(spinner=None), True),
+        (False, DummyAction(spinner=False), False),
+        (False, DummyAction(spinner=True), False),
+        (False, DummyAction(spinner=None), False),
     ],
 )
 def test_should_enable_spinner(no_spinner_flag, action_obj, expected):
