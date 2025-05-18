@@ -1,0 +1,38 @@
+#!/usr/bin/env python3
+
+"""Thin wrapper executable for *Copilot CLI*.
+
+This helper allows users to invoke the tool via the short command name
+``copilit`` (note the missing *-cli.py* suffix) once the repository is
+cloned or placed somewhere on the ``$PATH``.
+
+It simply forwards all command-line arguments to the *copilot_cli* package’s
+main entry-point so the behaviour is identical to:
+
+    python -m copilot_cli <args>
+
+The wrapper is kept intentionally minimal to stay platform-independent and
+to avoid duplicating logic contained in the real CLI implementation.
+"""
+
+from __future__ import annotations
+
+import os
+import runpy
+import sys
+from pathlib import Path
+
+
+def _run() -> None:  # noqa: D401
+    """Execute *copilot_cli*'s ``__main__`` module with current ``argv``."""
+
+    # Ensure the package is importable when the wrapper lives next to the
+    # source checkout (i.e. without *pip install -e .*)
+    repo_root = Path(__file__).resolve().parent
+    sys.path.insert(0, str(repo_root))
+
+    runpy.run_module("copilot_cli", run_name="__main__")
+
+
+if __name__ == "__main__":  # pragma: no cover – script execution guard
+    _run()
