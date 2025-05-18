@@ -1,5 +1,7 @@
 # 🚀 Copilot CLI
 
+[![CI](https://github.com/rachartier/copilot-cli/actions/workflows/ci.yml/badge.svg)](https://github.com/rachartier/copilot-cli/actions/workflows/ci.yml) [![Release](https://github.com/rachartier/copilot-cli/actions/workflows/main.yml/badge.svg)](https://github.com/rachartier/copilot-cli/actions/workflows/main.yml)
+
 **Copilot CLI** is a standalone command-line interface that brings GitHub Copilot’s chat and action capabilities directly to your terminal. It enables conversational AI-driven code assistance, predefined workflows (actions), and flexible customization, all with first-class offline fallbacks and minimal external dependencies.
 
 ## Table of Contents
@@ -222,6 +224,12 @@ Refer to the existing entries in `actions.yml` for examples.
 
 - See `explanation.md` for an in-depth technical analysis and recent refactorings.
 - CI/Release automation builds a standalone binary via PyInstaller (`.github/workflows/main.yml`).
+- **Continuous Integration**: Run tests and lint on push/PR via `.github/workflows/ci.yml`.
+- **Running tests**:
+  ```sh
+  pip install pytest
+  pytest
+  ```
 
 ## Contributing
 
