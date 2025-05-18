@@ -247,6 +247,7 @@ Refer to the existing entries in `actions.yml` for examples.
 - **Running tests**:
   ```sh
   pip install --upgrade pip
+  pip install -e .
   pip install -r requirements.txt
   pytest --maxfail=1 --disable-warnings -q
   ```
